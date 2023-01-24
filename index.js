@@ -178,6 +178,53 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'week'); });
     }
 
+    function chartFullLine(chatData) {
+        let labels = [];
+        let dataSets = [];
+        for (let i = 0; i < chatData.length; i++) {
+            let counter = [];
+            for (let j = 0; j < chatData[i].messages.length; j++) {
+                let messageDay = new Date(new Date(chatData[i].messages[j].date_unixtime * 1000).toDateString()).toDateString();
+                if (counter.find(x => x.day === messageDay) == undefined) {
+                    counter.push({ day: messageDay, count: 1 });
+                } else {
+                    counter.find(x => x.day === messageDay).count++;
+                }
+            }
+
+            dataSets.push({
+                label: chatData[i].name,
+                data: counter.map(x => x.count),
+                borderColor: colors[i]
+            });
+
+            if (labels.length == 0) {
+                labels = counter.map(x => x.day);
+            }
+        }
+
+
+
+        let config = {
+            chart: {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: dataSets
+                },
+                options: {
+                    scales: {
+                        yAxes: [{
+                            stacked: false
+                        }]
+                    }
+                }
+            }
+        };
+
+        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'fullLine'); });
+    }
+
     async function main() {
         let data = await loadData();
         let members = readAllMembers(data);
@@ -186,6 +233,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         chartTotalWordCount(preparedData);
         chartTotalMessageCount(preparedData);
         chartWeekDay(preparedData);
+        chartFullLine(preparedData);
     }
 
     main()
