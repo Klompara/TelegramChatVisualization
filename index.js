@@ -6,7 +6,7 @@ const rl = readline.createInterface({
 });
 const pcj = require('phantom-chartjs');
 const chartOutputDir = './charts/'
-const colors = ['#0077b6','#B80F0A','#665191','#a05195','#d45087','#f95d6a','#ff7c43','#ffa600'];
+const colors = ['#0077b6', '#B80F0A', '#665191', '#a05195', '#d45087', '#f95d6a', '#ff7c43', '#ffa600'];
 
 pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
     if (err) throw err;
@@ -22,7 +22,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
     async function loadData() {
         // todo file selection
         let path = await userInput('Drag and drop JSON file of Chat export:');
-        return JSON.parse(fs.readFileSync(path.replaceAll('& ', '').replaceAll('\'', ''))).messages;
+        return JSON.parse(fs.readFileSync(path.replaceAll('& ', '').replaceAll('\'', '').replaceAll('"', ''))).messages;
     }
 
 
@@ -64,7 +64,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         let allMembers;
 
         while (allMembers == undefined || (allMembers != 'y' && allMembers != 'n')) {
-            allMembers = await userInput('Do you want to use all members of the chat [Y/N]? ');
+            allMembers = (await userInput('Do you want to use all members of the chat [Y/N]? ')).toLowerCase();
         }
 
         if (allMembers == 'y') {
@@ -75,7 +75,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         for (let i = 0; i < members.length; i++) {
             let add = undefined;
             while (add == undefined || (add != 'y' && add != 'n')) {
-                add = await userInput('Add ' + members[i] + ' [Y/N]? ');
+                add = (await userInput('Add ' + members[i] + ' [Y/N]? ')).toLowerCase();
             }
             if (add == 'y') {
                 selectedMembers.push(members[i]);
@@ -111,11 +111,71 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         };
 
         renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'words'); });
-
     }
 
-    function chartTotalMessageCount(data) {
+    function chartTotalMessageCount(chatData) {
+        let labels = chatData.map(x => x.name);
+        let data = chatData.map(x => x.messages.length);
+        let config = {
+            chart: {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Total Message Count',
+                        data: data,
+                        backgroundColor: colors
+                    }]
+                },
+                options: {
+                    scales: {
+                        yAxes: [{
+                            ticks: {
+                                beginAtZero: true
+                            }
+                        }]
+                    }
+                }
+            }
+        };
 
+        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'messages'); });
+    }
+
+    function chartWeekDay(chatData) {
+        let labels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        let dataSets = [];
+        for (let i = 0; i < chatData.length; i++) {
+            let counter = labels.map(x => { return { weekday: x, count: 0 } });
+            for (let j = 0; j < chatData[i].messages.length; j++) {
+                let weekday = labels[new Date(chatData[i].messages[j].date_unixtime * 1000).getUTCDay()]
+                counter.find(x => x.weekday == weekday).count++;
+            }
+
+            dataSets.push({
+                label: chatData[i].name,
+                data: counter.map(x => x.count),
+                borderColor: colors[i]
+            })
+        }
+        let config = {
+            chart: {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: dataSets
+                },
+                options: {
+                    scale: {
+                        ticks: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            }
+        };
+
+        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'week'); });
     }
 
     async function main() {
@@ -124,6 +184,8 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         members = await selectMembers(members);
         let preparedData = prepareData(members, data);
         chartTotalWordCount(preparedData);
+        chartTotalMessageCount(preparedData);
+        chartWeekDay(preparedData);
     }
 
     main()
