@@ -8,6 +8,12 @@ const pcj = require('phantom-chartjs');
 const chartOutputDir = './charts/'
 const colors = ['#0077b6', '#B80F0A', '#665191', '#a05195', '#d45087', '#f95d6a', '#ff7c43', '#ffa600'];
 
+Date.prototype.addDays = function (days) {
+    let date = new Date(this.valueOf());
+    date.setDate(date.getDate() + days);
+    return date;
+}
+
 pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
     if (err) throw err;
 
@@ -37,19 +43,34 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         return allMembers;
     }
 
-    function prepareData(members, data) {
+    function prepareUserData(members, data) {
         let preparedData = [];
         let allMessages = data.filter(x => x.type == 'message' && typeof (x.text) == 'string' && x.text.length > 0);
+        let allPhotos = data.filter(x => x.type == 'message' && x.hasOwnProperty('photo'));
+        let allVideos = data.filter(x => x.type == 'message' && x.hasOwnProperty('media_type') && x.media_type == 'video_file');
+        let allStickers = data.filter(x => x.type == 'message' && x.hasOwnProperty('media_type') && x.media_type == 'sticker');
+        let allVoiceMessages = data.filter(x => x.type == 'message' && x.hasOwnProperty('media_type') && x.media_type == 'voice_message');
+        let allVideomessages = data.filter(x => x.type == 'message' && x.hasOwnProperty('media_type') && x.media_type == 'video_message');
         members.forEach(member => {
             preparedData.push(
                 {
                     'name': member,
                     'messages': allMessages.filter(x => x.from == member),
-                    'allWords': allMessages.filter(x => x.from == member).map(x => x.text.split(/[\s,]+/)).flat(1)
+                    'allWords': allMessages.filter(x => x.from == member).map(x => x.text.split(/[\s,]+/)).flat(1),
+                    'photos': allPhotos.filter(x => x.from == member),
+                    'videos': allVideos.filter(x => x.from == member),
+                    'stickers': allStickers.filter(x => x.from == member),
+                    'voice': allVoiceMessages.filter(x => x.from == member),
+                    'roundvideo': allVideomessages.filter(x => x.from == member),
+                    'emojis': allMessages.filter(x => x.from == member).map(x => x.text.split(/[\s,]+/)).flat(1).filter(x => x.match(/\p{EPres}|\p{ExtPict}/gu)).map(x => x.match(/\p{EPres}|\p{ExtPict}/gu)).flat(1)
                 }
             )
         });
         return preparedData;
+    }
+
+    function prepareGroupCalls(data) {
+        return data.filter(x => x.action == 'group_call');
     }
 
     async function userInput(prompt) {
@@ -88,6 +109,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         let labels = chatData.map(x => x.name);
         let data = chatData.map(x => x.allWords.length);
         let config = {
+            width: 1920,
             chart: {
                 type: 'bar',
                 data: {
@@ -110,13 +132,14 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
             }
         };
 
-        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'words'); });
+        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'words'); console.log(`Finished total words bar chart!`); });
     }
 
     function chartTotalMessageCount(chatData) {
         let labels = chatData.map(x => x.name);
         let data = chatData.map(x => x.messages.length);
         let config = {
+            width: 1920,
             chart: {
                 type: 'bar',
                 data: {
@@ -139,7 +162,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
             }
         };
 
-        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'messages'); });
+        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'messages'); console.log(`Finished total messages bar chart!`); });
     }
 
     function chartWeekDay(chatData) {
@@ -159,6 +182,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
             })
         }
         let config = {
+            width: 1920,
             chart: {
                 type: 'radar',
                 data: {
@@ -175,21 +199,29 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
             }
         };
 
-        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'week'); });
+        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'week'); console.log(`Finished week radar chart!`); });
     }
 
     function chartFullLine(chatData) {
         let labels = [];
         let dataSets = [];
+        let minTime = 8640000000000000;
+        let maxTime = -8640000000000000;
         for (let i = 0; i < chatData.length; i++) {
             let counter = [];
             for (let j = 0; j < chatData[i].messages.length; j++) {
-                let messageDay = new Date(new Date(chatData[i].messages[j].date_unixtime * 1000).toDateString()).toDateString();
+                let unixTime = chatData[i].messages[j].date_unixtime * 1000;
+
+                let messageDay = new Date(new Date(unixTime).toDateString()).toDateString();
                 if (counter.find(x => x.day === messageDay) == undefined) {
                     counter.push({ day: messageDay, count: 1 });
                 } else {
                     counter.find(x => x.day === messageDay).count++;
                 }
+
+                // get min and max time
+                minTime = minTime > unixTime ? unixTime : minTime;
+                maxTime = maxTime < unixTime ? unixTime : maxTime;
             }
 
             dataSets.push({
@@ -197,15 +229,18 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 data: counter.map(x => x.count),
                 borderColor: colors[i]
             });
-
-            if (labels.length == 0) {
-                labels = counter.map(x => x.day);
-            }
         }
 
-
+        //generate labels
+        let date = new Date(new Date(minTime).toDateString());
+        let dateMax = new Date(new Date(maxTime).toDateString());
+        while (date <= dateMax) {
+            labels.push(new Date(date.toDateString()).toDateString());
+            date = date.addDays(1);
+        }
 
         let config = {
+            width: 1920,
             chart: {
                 type: 'line',
                 data: {
@@ -222,18 +257,39 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
             }
         };
 
-        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'fullLine'); });
+        renderer.renderBase64(config, function (err, data) { saveBase64File(data, 'fullLine'); console.log(`Finished history line chart!`); });
+    }
+
+    function chartMostUsedWords(chatData) {
+        for (let i = 0; i < chatData.length; i++) {
+            let wordlist = chatData[i].allWords;
+            let occurences = [];
+            for (let j = 0; j < wordlist.length; j++) {
+                let word = wordlist[j];
+                if (occurences.find(x => x.word == word) == undefined) {
+                    occurences.push({ word: word, count: 1 });
+                } else {
+                    occurences.find(x => x.word == word).count++;
+                }
+            }
+            occurences = occurences.sort(function (a, b) {
+                return b.count - a.count;
+            });
+            console.log(occurences);
+        }
     }
 
     async function main() {
         let data = await loadData();
         let members = readAllMembers(data);
         members = await selectMembers(members);
-        let preparedData = prepareData(members, data);
+        let preparedData = prepareUserData(members, data);
+        let groupCalls = prepareGroupCalls(data);
         chartTotalWordCount(preparedData);
         chartTotalMessageCount(preparedData);
         chartWeekDay(preparedData);
         chartFullLine(preparedData);
+        chartMostUsedWords(preparedData);
     }
 
     main()
