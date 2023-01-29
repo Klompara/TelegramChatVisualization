@@ -8,15 +8,16 @@ const pcj = require('phantom-chartjs');
 const chartOutputDir = './charts/'
 const colors = ['#0077b6', '#B80F0A', '#665191', '#a05195', '#d45087', '#f95d6a', '#ff7c43', '#ffa600'];
 const topUsedWordsCount = 20;
+const topUsedEmojisCount = 20;
 
 /*
 TODO
-    emoji
-    top words
     chart background
     display labels
     group calls
     media (video, photo...)
+    emoji style
+    chart generation duration
 */
 
 Date.prototype.addDays = function (days) {
@@ -332,7 +333,12 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
 
     function chartMostUsedWords(chatData) {
         return new Promise((resolve, reject) => {
+            let labels = [];
+            let datasets = [];
+
             for (let i = 0; i < chatData.length; i++) {
+                let data = [];
+
                 let wordlist = chatData[i].allWords;
                 let occurences = [];
                 for (let j = 0; j < wordlist.length; j++) {
@@ -346,8 +352,111 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 occurences = occurences.sort(function (a, b) {
                     return b.count - a.count;
                 });
-                console.log(occurences);
+
+                for (let j = 0; j < labels.length; j++) {
+                    data.push(0);
+                }
+
+                for (let j = 0; j < topUsedEmojisCount && occurences[j] != undefined; j++) {
+                    labels.push(occurences[j].word);
+                    data.push(occurences[j].count);
+                }
+
+                datasets.push({
+                    label: chatData[i].name,
+                    data: data,
+                    backgroundColor: colors[i]
+                });
             }
+
+            let config = {
+                width: 1920,
+                chart: {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: datasets
+                    },
+                    options: {
+                        scales: {
+                            yAxes: [{
+                                ticks: {
+                                    beginAtZero: true
+                                }
+                            }]
+                        }
+                    }
+                }
+            };
+
+            render(config, 'occurences', resolve, reject);
+        });
+    }
+
+    function chartMostUsedEmojis(chatData) {
+        return new Promise((resolve, reject) => {
+            let labels = [];
+            let datasets = [];
+
+            for (let i = 0; i < chatData.length; i++) {
+                let data = [];
+
+                let emojilist = chatData[i].emojis;
+                let occurences = [];
+                for (let j = 0; j < emojilist.length; j++) {
+                    let emoji = emojilist[j];
+                    if (occurences.find(x => x.emoji == emoji) == undefined) {
+                        occurences.push({ emoji: emoji, count: 1 });
+                    } else {
+                        occurences.find(x => x.emoji == emoji).count++;
+                    }
+                }
+                occurences = occurences.sort(function (a, b) {
+                    return b.count - a.count;
+                });
+
+                for (let j = 0; j < labels.length; j++) {
+                    data.push(0);
+                }
+
+                for (let j = 0; j < topUsedEmojisCount && occurences[j] != undefined; j++) {
+                    labels.push(occurences[j].emoji);
+                    data.push(occurences[j].count);
+                }
+
+                datasets.push({
+                    label: chatData[i].name,
+                    data: data,
+                    backgroundColor: colors[i]
+                });
+            }
+
+            let config = {
+                width: 1920,
+                chart: {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: datasets
+                    },
+                    options: {
+                        scales: {
+                            yAxes: [{
+                                ticks: {
+                                    beginAtZero: true
+                                }
+                            }]
+                        },
+                        legend: {
+                            labels: {
+                                defaultFontFamily: 'OpenMoji'
+                            }
+                        }
+                    }
+                }
+            };
+
+            render(config, 'emojis', resolve, reject);
         });
     }
 
@@ -362,7 +471,9 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
             chartTotalMessageCount(preparedData),
             chartAverageMessageCount(preparedData),
             chartWeekDay(preparedData),
-            chartFullLine(preparedData)]
+            chartFullLine(preparedData),
+            chartMostUsedWords(preparedData),
+            chartMostUsedEmojis(preparedData)]
         ).then(data => {
             data.forEach(x => {
                 saveBase64File(x.data, x.chartName);
