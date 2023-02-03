@@ -17,7 +17,7 @@ TODO
     group calls
     media (video, photo...)
     emoji style
-    chart generation duration
+    time of day chart
 */
 
 Date.prototype.addDays = function (days) {
@@ -446,17 +446,95 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                                     beginAtZero: true
                                 }
                             }]
-                        },
-                        legend: {
-                            labels: {
-                                defaultFontFamily: 'OpenMoji'
-                            }
                         }
                     }
                 }
             };
 
             render(config, 'emojis', resolve, reject);
+        });
+    }
+
+    function chartBubbleActivity(chatData, groupCalls) {
+        return new Promise((resolve, reject) => {
+            let labels = [];
+            let dataSets = [];
+            let minTime = 8640000000000000;
+            let maxTime = -8640000000000000;
+
+            for (let i = 0; i < groupCalls.length; i++) {
+                let call = groupCalls[i];
+                let unixTime = call.date_unixtime * 1000;
+                let callDay = new Date(new Date(unixTime).toDateString());
+
+                // get min and max time
+                minTime = minTime > unixTime ? unixTime : minTime;
+                maxTime = maxTime < unixTime ? unixTime : maxTime;
+            }
+            //dataSets.push({
+            //    label: 'Group Calls',
+            //    data: [],
+            //    borderColor: colors[0]
+            //});
+
+            //generate labels
+            let date = new Date(new Date(minTime).toDateString());
+            let dateMax = new Date(new Date(maxTime).toDateString());
+            while (date <= dateMax) {
+                labels.push(new Date(date.toDateString()).toDateString());
+                date = date.addDays(1);
+            }
+
+            let config = {
+                width: 1920,
+                chart: {
+                    type: 'bubble',
+                    data: {
+                        datasets: [{
+                            label: 'Group Calls',
+                            data: [{
+                                x: 20,
+                                y: 30,
+                                r: 15
+                            }, {
+                                x: 40,
+                                y: 10,
+                                r: 10
+                            }],
+                            backgroundColor: colors[colors.length - 1]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        title: {
+                            display: true,
+                            text: 'Weekly activity'
+                        },
+                        scales: {
+                            xAxes: [{
+                                type: 'time',
+                                time: {
+                                    displayFormats: {
+                                        unit: 'hour',
+                                        hour: 'hh:mm'
+                                    }
+                                }
+                            }],
+                            yAxes: [{
+                                type: 'time',
+                                time: {
+                                    displayFormats: {
+                                        unit: 'day',
+                                        day: 'yyyy.MM.dd'
+                                    }
+                                }
+                            }]
+                        }
+                    }
+                }
+            };
+
+            render(config, 'activity', resolve, reject);
         });
     }
 
@@ -467,13 +545,14 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         let preparedData = prepareUserData(members, data);
         let groupCalls = prepareGroupCalls(data);
         Promise.all([
-            chartTotalWordCount(preparedData),
-            chartTotalMessageCount(preparedData),
-            chartAverageMessageCount(preparedData),
-            chartWeekDay(preparedData),
-            chartFullLine(preparedData),
-            chartMostUsedWords(preparedData),
-            chartMostUsedEmojis(preparedData)]
+            //chartTotalWordCount(preparedData),
+            //chartTotalMessageCount(preparedData),
+            //chartAverageMessageCount(preparedData),
+            //chartWeekDay(preparedData),
+            //chartFullLine(preparedData),
+            //chartMostUsedWords(preparedData),
+            //chartMostUsedEmojis(preparedData),
+            chartBubbleActivity(preparedData, groupCalls)]
         ).then(data => {
             data.forEach(x => {
                 saveBase64File(x.data, x.chartName);
