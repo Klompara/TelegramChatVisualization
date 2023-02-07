@@ -12,11 +12,9 @@ const topUsedEmojisCount = 20;
 
 /*
 TODO
-    chart background
-    display labels
-    group calls
-    media (video, photo...)
-    emoji style
+    chart background (white background)
+    display labels (y value above bars)
+    emoji style (better emojis)
     time of day chart
 */
 
@@ -37,12 +35,12 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         fs.writeFileSync(chartOutputDir + filename + '.png', base64, 'base64', (err) => { console.error('Error writing file: ' + err) });
     }
 
-    function render(config, name, resolve, reject) {
+    function render(config, name, resolve, reject, startdate) {
         renderer.renderBase64(config, function (err, data) {
             if (err) {
                 reject(err);
             } else {
-                resolve({ chartName: name, data: data });
+                resolve({ chartName: name, data: data, duration: new Date() - startdate });
             }
         });
     }
@@ -128,6 +126,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
 
     function chartTotalWordCount(chatData) {
         return new Promise((resolve, reject) => {
+            let startdate = new Date();
             let labels = chatData.map(x => x.name);
             let data = chatData.map(x => x.allWords.length);
             let config = {
@@ -154,12 +153,13 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 }
             };
 
-            render(config, 'words', resolve, reject);
+            render(config, 'words', resolve, reject, startdate);
         });
     }
 
     function chartTotalMessageCount(chatData) {
         return new Promise((resolve, reject) => {
+            let startdate = new Date();
             let labels = chatData.map(x => x.name);
             let total = chatData.map(x => x.messages.length);
             let config = {
@@ -186,12 +186,13 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 }
             };
 
-            render(config, 'messages', resolve, reject);
+            render(config, 'messages', resolve, reject, startdate);
         });
     }
 
     function chartAverageMessageCount(chatData) {
         return new Promise((resolve, reject) => {
+            let startdate = new Date();
             let labels = chatData.map(x => x.name);
             let averageMessagesDay = chatData.map(function (x) {
                 let messages = x.messages.length;
@@ -228,27 +229,29 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 }
             };
 
-            render(config, 'average', resolve, reject);
+            render(config, 'average', resolve, reject, startdate);
         });
     }
 
     function chartWeekDay(chatData) {
         return new Promise((resolve, reject) => {
+            let startdate = new Date();
             let labels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
             let dataSets = [];
-            for (let i = 0; i < chatData.length; i++) {
+            chatData.forEach((memberData, memberIndex) => {
                 let counter = labels.map(x => { return { weekday: x, count: 0 } });
-                for (let j = 0; j < chatData[i].messages.length; j++) {
-                    let weekday = labels[new Date(chatData[i].messages[j].date_unixtime * 1000).getUTCDay()]
+                for (let j = 0; j < memberData.messages.length; j++) {
+                    let weekday = labels[new Date(memberData.messages[j].date_unixtime * 1000).getUTCDay()]
                     counter.find(x => x.weekday == weekday).count++;
                 }
 
                 dataSets.push({
-                    label: chatData[i].name,
+                    label: memberData.name,
                     data: counter.map(x => x.count),
-                    borderColor: colors[i]
+                    borderColor: colors[memberIndex]
                 })
-            }
+            })
+
             let config = {
                 width: 1920,
                 chart: {
@@ -267,20 +270,22 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 }
             };
 
-            render(config, 'week', resolve, reject);
+            render(config, 'week', resolve, reject, startdate);
         });
     }
 
     function chartFullLine(chatData) {
         return new Promise((resolve, reject) => {
+            let startdate = new Date();
             let labels = [];
             let dataSets = [];
             let minTime = 8640000000000000;
             let maxTime = -8640000000000000;
-            for (let i = 0; i < chatData.length; i++) {
+
+            chatData.forEach((memberData, memberIndex) => {
                 let counter = [];
-                for (let j = 0; j < chatData[i].messages.length; j++) {
-                    let unixTime = chatData[i].messages[j].date_unixtime * 1000;
+                for (let j = 0; j < memberData.messages.length; j++) {
+                    let unixTime = memberData.messages[j].date_unixtime * 1000;
 
                     let messageDay = new Date(new Date(unixTime).toDateString()).toDateString();
                     if (counter.find(x => x.day === messageDay) == undefined) {
@@ -295,11 +300,11 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 }
 
                 dataSets.push({
-                    label: chatData[i].name,
+                    label: memberData.name,
                     data: counter.map(x => x.count),
-                    borderColor: colors[i]
+                    borderColor: colors[memberIndex]
                 });
-            }
+            });
 
             //generate labels
             let date = new Date(new Date(minTime).toDateString());
@@ -327,35 +332,34 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 }
             };
 
-            render(config, 'history', resolve, reject);
+            render(config, 'history', resolve, reject, startdate);
         });
     }
 
     function chartMostUsedWords(chatData) {
         return new Promise((resolve, reject) => {
+            let startdate = new Date();
             let labels = [];
             let datasets = [];
 
-            for (let i = 0; i < chatData.length; i++) {
+            chatData.forEach((memberData, memberIndex) => {
                 let data = [];
 
-                let wordlist = chatData[i].allWords;
+                let wordlist = memberData.allWords;
                 let occurences = [];
-                for (let j = 0; j < wordlist.length; j++) {
-                    let word = wordlist[j];
+
+                wordlist.forEach(word => {
                     if (occurences.find(x => x.word == word) == undefined) {
                         occurences.push({ word: word, count: 1 });
                     } else {
                         occurences.find(x => x.word == word).count++;
                     }
-                }
+                });
                 occurences = occurences.sort(function (a, b) {
                     return b.count - a.count;
                 });
 
-                for (let j = 0; j < labels.length; j++) {
-                    data.push(0);
-                }
+                labels.forEach(x => data.push(0));
 
                 for (let j = 0; j < topUsedEmojisCount && occurences[j] != undefined; j++) {
                     labels.push(occurences[j].word);
@@ -363,11 +367,11 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 }
 
                 datasets.push({
-                    label: chatData[i].name,
+                    label: memberData.name,
                     data: data,
-                    backgroundColor: colors[i]
+                    backgroundColor: colors[memberIndex]
                 });
-            }
+            });
 
             let config = {
                 width: 1920,
@@ -389,19 +393,19 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 }
             };
 
-            render(config, 'occurences', resolve, reject);
+            render(config, 'occurences', resolve, reject, startdate);
         });
     }
 
     function chartMostUsedEmojis(chatData) {
         return new Promise((resolve, reject) => {
+            let startdate = new Date();
             let labels = [];
             let datasets = [];
 
-            for (let i = 0; i < chatData.length; i++) {
+            chatData.forEach((memberData, memberIndex) => {
                 let data = [];
-
-                let emojilist = chatData[i].emojis;
+                let emojilist = memberData.emojis;
                 let occurences = [];
                 for (let j = 0; j < emojilist.length; j++) {
                     let emoji = emojilist[j];
@@ -425,11 +429,11 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 }
 
                 datasets.push({
-                    label: chatData[i].name,
+                    label: memberData.name,
                     data: data,
-                    backgroundColor: colors[i]
+                    backgroundColor: colors[memberIndex]
                 });
-            }
+            });
 
             let config = {
                 width: 1920,
@@ -451,90 +455,122 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                 }
             };
 
-            render(config, 'emojis', resolve, reject);
+            render(config, 'emojis', resolve, reject, startdate);
         });
     }
 
-    function chartBubbleActivity(chatData, groupCalls) {
+    function chartScatterActivity(chatData, groupCalls) {
         return new Promise((resolve, reject) => {
-            let labels = [];
-            let dataSets = [];
+            let startdate = new Date();
+            let labelsX = [];
+            let labelsY = [];
+            let dataPointsCalls = [];
+            let datasets = [];
+
             let minTime = 8640000000000000;
             let maxTime = -8640000000000000;
 
-            for (let i = 0; i < groupCalls.length; i++) {
-                let call = groupCalls[i];
+            // Determin max/min time for scale
+            groupCalls.forEach(call => {
                 let unixTime = call.date_unixtime * 1000;
-                let callDay = new Date(new Date(unixTime).toDateString());
-
-                // get min and max time
                 minTime = minTime > unixTime ? unixTime : minTime;
                 maxTime = maxTime < unixTime ? unixTime : maxTime;
-            }
-            //dataSets.push({
-            //    label: 'Group Calls',
-            //    data: [],
-            //    borderColor: colors[0]
-            //});
+            })
 
-            //generate labels
+            chatData.forEach(memberData => {
+                ['photos', 'videos', 'stickers', 'voice', 'roundvideo'].forEach(collection => {
+                    memberData[collection].forEach(message => {
+                        let unixTime = message.date_unixtime * 1000;
+                        minTime = minTime > unixTime ? unixTime : minTime;
+                        maxTime = maxTime < unixTime ? unixTime : maxTime;
+                    });
+                });
+            });
+
+            //generate labels for x-axis
             let date = new Date(new Date(minTime).toDateString());
             let dateMax = new Date(new Date(maxTime).toDateString());
             while (date <= dateMax) {
-                labels.push(new Date(date.toDateString()).toDateString());
+                labelsX.push(new Date(date.toDateString()).toDateString());
                 date = date.addDays(1);
             }
+
+            // generate labels for y-axis
+            for (let h = 23; h >= 0; h--) {
+                for (let m = 59; m >= 0; m--) {
+                    labelsY.push(('0' + h).slice(-2) + ':' + ('0' + m).slice(-2));
+                }
+            }
+
+            // group call datapoints
+            groupCalls.forEach(call => {
+                let datetime = new Date(call.date_unixtime * 1000);
+                let date = new Date(datetime.toDateString()).toDateString();
+                let time = ('0' + datetime.getHours()).slice(-2) + ':' + ('0' + datetime.getMinutes()).slice(-2);
+                dataPointsCalls.push({
+                    x: date,
+                    y: time
+                });
+            });
+            datasets.push({
+                label: 'Group Calls',
+                data: dataPointsCalls,
+                backgroundColor: colors[colors.length - 1],
+                pointStyle: 'circle',
+                pointRadius: 5
+            })
+
+            // media datapoints
+            chatData.forEach((memberData, memberIndex) => {
+                ['photos', 'videos', 'stickers', 'voice', 'roundvideo'].forEach((collection, collectionIndex) => {
+                    let dataPoints = [];
+                    memberData[collection].forEach(message => {
+                        let datetime = new Date(message.date_unixtime * 1000);
+                        let date = new Date(datetime.toDateString()).toDateString();
+                        let time = ('0' + datetime.getHours()).slice(-2) + ':' + ('0' + datetime.getMinutes()).slice(-2);
+                        dataPoints.push({
+                            x: date,
+                            y: time
+                        });
+                    });
+                    datasets.push({
+                        label: memberData.name,
+                        data: dataPoints,
+                        borderColor: colors[memberIndex],
+                        pointStyle: ['cross', 'rectRot', 'star', 'triangle', 'crossRot'][collectionIndex],
+                        pointRadius: 5
+                    });
+                });
+            });
 
             let config = {
                 width: 1920,
                 chart: {
-                    type: 'bubble',
+                    type: 'scatter',
                     data: {
-                        datasets: [{
-                            label: 'Group Calls',
-                            data: [{
-                                x: 20,
-                                y: 30,
-                                r: 15
-                            }, {
-                                x: 40,
-                                y: 10,
-                                r: 10
-                            }],
-                            backgroundColor: colors[colors.length - 1]
-                        }]
+                        datasets: datasets
                     },
                     options: {
                         responsive: true,
                         title: {
                             display: true,
-                            text: 'Weekly activity'
+                            text: '[Photo +], [Videos ◇], [Stickers=Star], [Voicemessage △], [Round-Video x], [Calls ◯]'
                         },
                         scales: {
                             xAxes: [{
-                                type: 'time',
-                                time: {
-                                    displayFormats: {
-                                        unit: 'hour',
-                                        hour: 'hh:mm'
-                                    }
-                                }
+                                labels: labelsX,
+                                type: 'category'
                             }],
                             yAxes: [{
-                                type: 'time',
-                                time: {
-                                    displayFormats: {
-                                        unit: 'day',
-                                        day: 'yyyy.MM.dd'
-                                    }
-                                }
+                                labels: labelsY,
+                                type: 'category'
                             }]
                         }
                     }
                 }
             };
 
-            render(config, 'activity', resolve, reject);
+            render(config, 'activity', resolve, reject, startdate);
         });
     }
 
@@ -545,18 +581,18 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         let preparedData = prepareUserData(members, data);
         let groupCalls = prepareGroupCalls(data);
         Promise.all([
-            //chartTotalWordCount(preparedData),
-            //chartTotalMessageCount(preparedData),
-            //chartAverageMessageCount(preparedData),
-            //chartWeekDay(preparedData),
-            //chartFullLine(preparedData),
-            //chartMostUsedWords(preparedData),
-            //chartMostUsedEmojis(preparedData),
-            chartBubbleActivity(preparedData, groupCalls)]
+            chartTotalWordCount(preparedData),
+            chartTotalMessageCount(preparedData),
+            chartAverageMessageCount(preparedData),
+            chartWeekDay(preparedData),
+            chartFullLine(preparedData),
+            chartMostUsedWords(preparedData),
+            chartMostUsedEmojis(preparedData),
+            chartScatterActivity(preparedData, groupCalls)]
         ).then(data => {
             data.forEach(x => {
                 saveBase64File(x.data, x.chartName);
-                console.log(`Saved chart: ${x.chartName}`);
+                console.log(`Saved chart: [${x.chartName}] [${x.duration}ms]`);
             });
         }).catch(err => {
             console.error(`Error Generating Chart!`, err);
