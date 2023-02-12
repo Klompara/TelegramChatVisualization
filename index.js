@@ -48,7 +48,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
     async function loadData() {
         // todo file selection
         let path = await userInput('Drag and drop JSON file of Chat export:');
-        return JSON.parse(fs.readFileSync(path.replaceAll('& ', '').replaceAll('\'', '').replaceAll('"', ''))).messages;
+        return JSON.parse(fs.readFileSync(path.replace(/&|"|'/gm, ''))).messages;
     }
 
     function readAllMembers(data) {
