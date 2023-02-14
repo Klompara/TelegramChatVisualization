@@ -582,7 +582,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
             chatData.forEach((memberData, memberIndex) => {
                 let occurences = [];
                 for (let hh = 0; hh <= 23; hh++) {
-                    for (let mm = 0; mm <= 45; mm+=15) {
+                    for (let mm = 0; mm <= 45; mm += 15) {
                         let label = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
                         occurences.push({
                             label: label,
