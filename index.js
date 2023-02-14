@@ -7,15 +7,14 @@ const rl = readline.createInterface({
 const pcj = require('phantom-chartjs');
 const chartOutputDir = './charts/'
 const colors = ['#0077b6', '#B80F0A', '#665191', '#a05195', '#d45087', '#f95d6a', '#ff7c43', '#ffa600'];
-const topUsedWordsCount = 20;
-const topUsedEmojisCount = 20;
+const topUsedWordsCount = 50;
+const topUsedEmojisCount = 30;
 
 /*
 TODO
     chart background (white background)
     display labels (y value above bars)
     emoji style (better emojis)
-    time of day chart
 */
 
 Date.prototype.addDays = function (days) {
@@ -361,7 +360,7 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
 
                 labels.forEach(x => data.push(0));
 
-                for (let j = 0; j < topUsedEmojisCount && occurences[j] != undefined; j++) {
+                for (let j = 0; j < topUsedWordsCount && occurences[j] != undefined; j++) {
                     labels.push(occurences[j].word);
                     data.push(occurences[j].count);
                 }
@@ -574,6 +573,63 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
         });
     }
 
+    function chartLineDailyActivity(chatData) {
+        return new Promise((resolve, reject) => {
+            let startdate = new Date();
+            let labelsX = [];
+            let dataSets = [];
+
+            chatData.forEach((memberData, memberIndex) => {
+                let occurences = [];
+                for (let hh = 0; hh <= 23; hh++) {
+                    for (let mm = 0; mm <= 45; mm+=15) {
+                        let label = ('0' + hh).slice(-2) + ':' + ('0' + mm).slice(-2);
+                        occurences.push({
+                            label: label,
+                            count: 0
+                        });
+                        if (memberIndex == 0) {
+                            labelsX.push(label);
+                        }
+                    }
+                }
+                memberData.messages.forEach(message => {
+                    let messageDate = new Date(message.date_unixtime * 1000);
+                    let hours = messageDate.getHours();
+                    let minutes = (Math.round(messageDate.getMinutes() / 15) * 15) % 60; // round to quarter hour
+                    let labelNeedle = ('0' + hours).slice(-2) + ':' + ('0' + minutes).slice(-2);
+                    occurences.find(x => x.label == labelNeedle).count++;
+                });
+
+                dataSets.push({
+                    label: memberData.name,
+                    data: occurences.map(x => x.count),
+                    borderColor: colors[memberIndex]
+                });
+            });
+
+            let config = {
+                width: 1920,
+                chart: {
+                    type: 'line',
+                    data: {
+                        labels: labelsX,
+                        datasets: dataSets
+                    },
+                    options: {
+                        scales: {
+                            yAxes: [{
+                                stacked: false
+                            }]
+                        }
+                    }
+                }
+            };
+
+            render(config, 'daily', resolve, reject, startdate);
+        });
+    }
+
     (async function main() {
         let data = await loadData();
         let members = readAllMembers(data);
@@ -588,7 +644,8 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
             chartFullLine(preparedData),
             chartMostUsedWords(preparedData),
             chartMostUsedEmojis(preparedData),
-            chartScatterActivity(preparedData, groupCalls)]
+            chartScatterActivity(preparedData, groupCalls),
+            chartLineDailyActivity(preparedData)]
         ).then(data => {
             data.forEach(x => {
                 saveBase64File(x.data, x.chartName);
