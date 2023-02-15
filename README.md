@@ -10,7 +10,7 @@ NodeJS script to generate charts with an exported Telegram chat
 
 ### Installing
 
-    node install
+    npm install
 
 ### Running
     node index.js
