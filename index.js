@@ -278,8 +278,22 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
             let startdate = new Date();
             let labels = [];
             let dataSets = [];
-            let minTime = 8640000000000000;
-            let maxTime = -8640000000000000;
+
+            // get min/max time
+            let minTime = chatData.reduce((a, b) => a.messages.concat(b.messages || []))
+                .map(message => parseInt(message.date_unixtime))
+                .reduce((a, b) => Math.min(a, b)) * 1000;
+            let maxTime = chatData.reduce((a, b) => a.messages.concat(b.messages || []))
+                .map(message => parseInt(message.date_unixtime))
+                .reduce((a, b) => Math.max(a, b)) * 1000;
+
+            //generate labels
+            let date = new Date(new Date(minTime).toDateString());
+            let dateMax = new Date(new Date(maxTime).toDateString());
+            while (date <= dateMax) {
+                labels.push(new Date(date.toDateString()).toDateString());
+                date = date.addDays(1);
+            }
 
             chatData.forEach((memberData, memberIndex) => {
                 let counter = [];
@@ -292,26 +306,14 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
                     } else {
                         counter.find(x => x.day === messageDay).count++;
                     }
-
-                    // get min and max time
-                    minTime = minTime > unixTime ? unixTime : minTime;
-                    maxTime = maxTime < unixTime ? unixTime : maxTime;
                 }
 
                 dataSets.push({
                     label: memberData.name,
-                    data: counter.map(x => x.count),
+                    data: labels.map(x => counter.find(y => y.day === x)?.count || 0),
                     borderColor: colors[memberIndex]
                 });
             });
-
-            //generate labels
-            let date = new Date(new Date(minTime).toDateString());
-            let dateMax = new Date(new Date(maxTime).toDateString());
-            while (date <= dateMax) {
-                labels.push(new Date(date.toDateString()).toDateString());
-                date = date.addDays(1);
-            }
 
             let config = {
                 width: 1920,
@@ -466,22 +468,16 @@ pcj.createChartRenderer({ port: 8080 }, (err, renderer) => {
             let dataPointsCalls = [];
             let datasets = [];
 
-            let minTime = 8640000000000000;
-            let maxTime = -8640000000000000;
-
-            // Determin max/min time for scale
-            groupCalls.forEach(call => {
-                let unixTime = call.date_unixtime * 1000;
-                minTime = minTime > unixTime ? unixTime : minTime;
-                maxTime = maxTime < unixTime ? unixTime : maxTime;
-            })
+            // get min/max time
+            let minTime = groupCalls.map(call => parseInt(call.date_unixtime)).reduce((a, b) => Math.min(a, b), Number.MAX_SAFE_INTEGER) * 1000;
+            let maxTime = groupCalls.map(call => parseInt(call.date_unixtime)).reduce((a, b) => Math.max(a, b), 0) * 1000;
 
             chatData.forEach(memberData => {
                 ['photos', 'videos', 'stickers', 'voice', 'roundvideo'].forEach(collection => {
                     memberData[collection].forEach(message => {
                         let unixTime = message.date_unixtime * 1000;
-                        minTime = minTime > unixTime ? unixTime : minTime;
-                        maxTime = maxTime < unixTime ? unixTime : maxTime;
+                        minTime = Math.min(unixTime, minTime);
+                        maxTime = Math.max(unixTime, maxTime);
                     });
                 });
             });
